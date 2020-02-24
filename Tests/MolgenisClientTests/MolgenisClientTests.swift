@@ -1,6 +1,6 @@
 import XCTest
 import MolgenisClient
-import Combine
+import OpenCombine
 
 final class MolgenisClientTests: XCTestCase {
     func testDownloadOneEntity() {
