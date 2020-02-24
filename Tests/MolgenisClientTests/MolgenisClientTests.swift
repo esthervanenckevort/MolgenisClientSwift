@@ -9,7 +9,7 @@ final class MolgenisClientTests: XCTestCase {
             XCTFail()
             return
         }
-        let cancelable = molgenis.get(with: "sys_md_Attribute").sink(receiveCompletion: {
+        let subscriber = Subscribers.Sink<EntityType, Error>(receiveCompletion: {
             (completion) in
             switch completion {
             case .failure(let error):
@@ -21,10 +21,32 @@ final class MolgenisClientTests: XCTestCase {
             XCTAssertEqual("sys_md_Attribute", test._id)
             expectation.fulfill()
         }
+        molgenis.get(id: "sys_md_Attribute", with: subscriber)
         wait(for: [expectation], timeout: 2)
-        cancelable.cancel()
+    }
+
+    func testDownloadCollectionOfEntity() {
+        let expectation = XCTestExpectation()
+        guard let molgenis = MolgenisClient(baseURL: URL(string: "https://directory.bbmri-eric.eu/")!) else {
+            XCTFail()
+            return
+        }
+        let subscriber = Subscribers.Sink<EntityType, Error>(receiveCompletion: {
+            (completion) in
+            switch completion {
+            case .failure(let error):
+                XCTFail(error.localizedDescription)
+            case .finished:
+                expectation.fulfill()
+            }
+        }) { (_) in
+            
+        }
+        molgenis.get(with: subscriber)
+        wait(for: [expectation], timeout: 2)
     }
     
+
     func testInvalidLogin() {
         let expectation = XCTestExpectation()
         expectation.isInverted = true

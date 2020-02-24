@@ -21,16 +21,49 @@ public class MolgenisClient {
         self.session = session
     }
     
-    public func get<T: Entity>(with id: String) -> AnyPublisher<T, Error> {
+    public func get<T: Entity>(id: String, with subscriber: Subscribers.Sink<T, Error>) {
         let url = apiPathV2.appendingPathComponent(T._entityName).appendingPathComponent(id)
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         return makeGETRequest(url: url)
             .flatMap { self.session.dataTaskPublisher(for: $0).mapError { $0 as Error } }
-            .print(#function)
             .map { $0.data }
             .decode(type: T.self, decoder: decoder)
-            .eraseToAnyPublisher()
+            .subscribe(subscriber)
+    }
+    
+    public func get<T: Entity>(with subscriber: Subscribers.Sink<T, Error>) {
+        let url = apiPathV2.appendingPathComponent(T._entityName)
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let subject = PassthroughSubject<URL, Never>()
+        subject
+            .receive(on: barrierQueue)  // Use barrier queue to avoid reading concurrent access to self.login
+            .tryMap { (url) -> URLRequest in
+                var request = URLRequest(url: url)
+                request.httpMethod = Method.get.rawValue
+                request.addValue(ContentType.json.rawValue, forHTTPHeaderField: Header.contentType.rawValue)
+                if let token = self.login?.token {
+                    request.addValue(token, forHTTPHeaderField: Header.token.rawValue)
+                }
+                return request
+            }
+            .receive(on: processQueue) // Switch back to a concurrent queue
+            .flatMap { self.session.dataTaskPublisher(for: $0).mapError { $0 as Error } }
+            .map { $0.data }
+            .decode(type: Collection<T>.self, decoder: decoder)
+            .flatMap { (collection) -> Publishers.Sequence<Array<T>, Error> in
+                defer {
+                    if let url = collection.nextHref {
+                        subject.send(url)
+                    } else {
+                        subject.send(completion: .finished)
+                    }
+                }
+                return Publishers.Sequence<Array<T>, Error>(sequence: collection.items)
+            }
+            .subscribe(subscriber)
+        subject.send(url)
     }
     
     public func login(user: String, password: String) -> AnyPublisher<Bool, Never> {
