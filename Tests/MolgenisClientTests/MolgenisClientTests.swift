@@ -9,8 +9,16 @@ final class MolgenisClientTests: XCTestCase {
             XCTFail()
             return
         }
-        let cancelable = molgenis.get(with: "sys_md_Attribute").sink(receiveCompletion: { (_) in }) { (test: Test) in
-            XCTAssertEqual("sys_md_Attribute", test.id)
+        let cancelable = molgenis.get(with: "sys_md_Attribute").sink(receiveCompletion: {
+            (completion) in
+            switch completion {
+            case .failure(let error):
+                XCTFail(error.localizedDescription)
+            case .finished:
+                break
+            }
+        }) { (test: EntityType) in
+            XCTAssertEqual("sys_md_Attribute", test._id)
             expectation.fulfill()
         }
         wait(for: [expectation], timeout: 2)
@@ -65,12 +73,4 @@ final class MolgenisClientTests: XCTestCase {
         wait(for: [expectation], timeout: 2)
         cancelable.cancel()
     }
-}
-
-struct Test: Entity {
-    static var _entityName = "sys_md_EntityType"
-    var _id: String { id }
-    var _label: String { label }
-    var id: String
-    var label: String
 }

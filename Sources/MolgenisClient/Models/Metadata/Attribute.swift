@@ -7,12 +7,15 @@
 
 import Foundation
 
-public final class Attribute: Decodable {
+public final class Attribute: Entity {
+    public static var _entityName = "sys_md_Attribute"
+    public var _id: String { id }
+    public var _label: String { name }
     public let id: String
     public let name: String
-    public let entity: EntityType
-    public let sequenceNr: Int
-    public let type: Type
+    public let entity: EntityType?
+    public let sequenceNr: Int?
+    public let type: Type?
     public let isIdAttribute: Bool?
     public let isLabelAttribute: Bool?
     public let lookupAttributeIndex: Int?
@@ -23,17 +26,17 @@ public final class Attribute: Decodable {
     public let mappedBy: Attribute?
     public let orderBy: String?
     public let expression: String?
-    public let isNullable: Bool
-    public let isAuto: Bool
-    public let isVisible: Bool
+    public let isNullable: Bool?
+    public let isAuto: Bool?
+    public let isVisible: Bool?
     public let label: String?
     public let description: String?
-    public let isAggregatable: Bool
+    public let isAggregatable: Bool?
     public let enumOptions: String?
     public let rangeMin: Int?
     public let rangeMax: Int?
-    public let isReadOnly: Bool
-    public let isUnique: Bool
+    public let isReadOnly: Bool?
+    public let isUnique: Bool?
     public let tags: [Tag]?
     public let nullableExpression: String?
     public let visibleExpression: String?

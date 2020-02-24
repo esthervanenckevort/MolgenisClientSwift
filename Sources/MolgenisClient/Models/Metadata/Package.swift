@@ -7,7 +7,10 @@
 
 import Foundation
 
-public final class Package: Decodable {
+public final class Package: Entity {
+    public static var _entityName = "sys_md_Package"
+    public var _id: String { id }
+    public var _label: String { label }
     public let id: String
     public let label: String
     public let description: String?

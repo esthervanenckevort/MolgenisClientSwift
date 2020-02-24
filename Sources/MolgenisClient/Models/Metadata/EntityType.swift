@@ -7,17 +7,20 @@
 
 import Foundation
 
-public final class EntityType: Decodable {
+public final class EntityType: Entity {
+    public static var _entityName = "sys_md_EntityType"
+    public var _id: String { id }
+    public var _label: String { label }
     public let id: String
     public let label: String
     public let description: String?
     public let package: Package?
     public let attributes: [Attribute]?
-    public let isAbstract: Bool
+    public let isAbstract: Bool?
     public let extends: EntityType?
     public let tags: [Tag]?
-    public let backend: Backend
-    public let indexingDepth: Int
+    public let backend: Backend?
+    public let indexingDepth: Int?
     public let labelEn: String?
     public let descriptionEn: String?
     public let labelNl: String?
@@ -33,4 +36,5 @@ public final class EntityType: Decodable {
     public let labelFr: String?
     public let descriptionFr: String?
     public let labelXx: String?
-    public let descriptionXx: String?}
+    public let descriptionXx: String?
+}
