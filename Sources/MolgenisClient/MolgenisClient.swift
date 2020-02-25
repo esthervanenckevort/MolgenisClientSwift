@@ -21,11 +21,15 @@ public class MolgenisClient {
     
     public init?(baseURL url: URL, using session: URLSession = .shared) {
         guard url.path == "/" || url.path == "" else {
+            #if os(Linux)
+            print("URL \(url) must not contain the API path.")
+            #else
             if #available(OSX 10.12, *) {
                 os_log("URL [%@] must not contain the API path.", [url])
             } else {
                 print("URL \(url) must not contain the API path.")
             }
+            #endif
             return nil
         }
         self.baseURL = url
