@@ -4,3 +4,4 @@
 /*.xcodeproj
 xcuserdata/
 Tests/MolgenisClientTests/User.swift
+.swiftpm/
