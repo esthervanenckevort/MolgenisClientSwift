@@ -9,7 +9,7 @@ final class MolgenisClientTests: XCTestCase {
             XCTFail()
             return
         }
-        let subscriber = Subscribers.Sink<EntityType, Error>(receiveCompletion: {
+        let subscriber = AnySubscriber<EntityType, Error>(Subscribers.Sink<EntityType, Error>(receiveCompletion: {
             (completion) in
             switch completion {
             case .failure(let error):
@@ -20,7 +20,8 @@ final class MolgenisClientTests: XCTestCase {
         }) { (test: EntityType) in
             XCTAssertEqual("sys_md_Attribute", test._id)
             expectation.fulfill()
-        }
+        })
+
         molgenis.get(id: "sys_md_Attribute", with: subscriber)
         wait(for: [expectation], timeout: 2)
     }
@@ -31,7 +32,7 @@ final class MolgenisClientTests: XCTestCase {
             XCTFail()
             return
         }
-        let subscriber = Subscribers.Sink<EntityType, Error>(receiveCompletion: {
+        let subscriber = AnySubscriber<EntityType, Error>(Subscribers.Sink<EntityType, Error>(receiveCompletion: {
             (completion) in
             switch completion {
             case .failure(let error):
@@ -41,11 +42,99 @@ final class MolgenisClientTests: XCTestCase {
             }
         }) { (_) in
             
-        }
+        })
         molgenis.get(with: subscriber)
         wait(for: [expectation], timeout: 2)
     }
-    
+
+    func testAggregateXAndY() {
+        let expectation = XCTestExpectation()
+        guard let molgenis = MolgenisClient(baseURL: URL(string: "https://samples.rd-connect.eu/")!) else {
+            XCTFail()
+            return
+        }
+        let subscriber = AnySubscriber<AggregateResponse<Int?, Int?>, Error>(Subscribers.Sink<AggregateResponse<Int?, Int?>, Error>(receiveCompletion: { completion in
+            switch completion {
+            case .finished:
+                expectation.fulfill()
+            case .failure(let error):
+                XCTFail(error.localizedDescription)
+            }
+        }) { response in
+            
+        })
+        molgenis.aggregates(entity: Sample.self, x: "AgeAtSampling", y: "AgeAtDiagnosis", with: subscriber)
+        wait(for: [expectation], timeout: 2)
+    }
+
+    func testAggregateXOnly() {
+        let expectation = XCTestExpectation()
+        guard let molgenis = MolgenisClient(baseURL: URL(string: "https://samples.rd-connect.eu/")!) else {
+            XCTFail()
+            return
+        }
+        let subscriber = AnySubscriber<AggregateResponse<Int?, Int?>, Error>(Subscribers.Sink<AggregateResponse<Int?, Int?>, Error>(receiveCompletion: { completion in
+            switch completion {
+            case .finished:
+                expectation.fulfill()
+            case .failure(let error):
+                XCTFail(error.localizedDescription)
+            }
+        }) { response in
+
+        })
+        molgenis.aggregates(entity: Sample.self, x: "AgeAtSampling", with: subscriber)
+        wait(for: [expectation], timeout: 2)
+    }
+
+    func testAggregateXOnlyWithDistinct() {
+        let expectation = XCTestExpectation()
+        guard let molgenis = MolgenisClient(baseURL: URL(string: "https://samples.rd-connect.eu/")!) else {
+            XCTFail()
+            return
+        }
+        let subscriber = AnySubscriber<AggregateResponse<Int?, Int?>, Error>(Subscribers.Sink<AggregateResponse<Int?, Int?>, Error>(receiveCompletion: { completion in
+            switch completion {
+            case .finished:
+                expectation.fulfill()
+            case .failure(let error):
+                XCTFail(error.localizedDescription)
+            }
+        }) { response in
+
+        })
+        molgenis.aggregates(entity: Sample.self, x: "AgeAtSampling", distinct: "ParticipantID", with: subscriber)
+        wait(for: [expectation], timeout: 2)
+    }
+
+    func testAggregateXYWithDistinct() {
+        let expectation = XCTestExpectation()
+        guard let molgenis = MolgenisClient(baseURL: URL(string: "https://samples.rd-connect.eu/")!) else {
+            XCTFail()
+            return
+        }
+        let subscriber = AnySubscriber<AggregateResponse<Int?, Int?>, Error>(Subscribers.Sink<AggregateResponse<Int?, Int?>, Error>(receiveCompletion: { completion in
+            switch completion {
+            case .finished:
+                expectation.fulfill()
+            case .failure(let error):
+                XCTFail(error.localizedDescription)
+            }
+        }) { response in
+
+        })
+        molgenis.aggregates(entity: Sample.self, x: "AgeAtSampling", y: "AgeAtDiagnosis", distinct: "ParticipantID", with: subscriber)
+        wait(for: [expectation], timeout: 2)
+    }
+
+    struct Sample: Entity {
+        static var _entityName = "rd_connect_Sample"
+        var _id: String { ID }
+        var _label: String { ID }
+        let ID: String
+        let AgeAtSampling: Int?
+        let AgeAtDiagnosis: Int?
+    }
 
     func testInvalidLogin() {
         let expectation = XCTestExpectation()

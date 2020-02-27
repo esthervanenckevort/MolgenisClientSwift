@@ -35,8 +35,25 @@ public class MolgenisClient {
         self.baseURL = url
         self.session = session
     }
+
+    public func aggregates<E: Entity, X: Decodable, Y: Decodable>(entity: E.Type, x: String, y: String? = nil, distinct: String? = nil, with subscriber: AnySubscriber<AggregateResponse<X, Y>, Error>) {
+        let decoder = JSONDecoder()
+        var components = URLComponents(url: apiPathV2.appendingPathComponent(E._entityName), resolvingAgainstBaseURL: true)
+        var queryItems = [URLQueryItem]()
+        queryItems.append(makeAggregateQueryItem(x: x, y: y, distinct: distinct))
+        components?.queryItems = queryItems
+        guard let url = components?.url else {
+            subscriber.receive(completion: .failure(MolgenisError.invalidURL))
+            return
+        }
+        return makeGETRequest(url: url)
+            .flatMap { self.session.ocombine.dataTaskPublisher(for: $0).mapError { $0 as Error } }
+            .map { $0.data }
+            .decode(type: AggregateResponse<X, Y>.self, decoder: decoder)
+            .subscribe(subscriber)
+    }
     
-    public func get<T: Entity>(id: String, with subscriber: Subscribers.Sink<T, Error>) {
+    public func get<T: Entity>(id: String, with subscriber: AnySubscriber<T, Error>) {
         let url = apiPathV2.appendingPathComponent(T._entityName).appendingPathComponent(id)
         let decoder = JSONDecoder()
         if #available(OSX 10.12, *) {
@@ -53,7 +70,7 @@ public class MolgenisClient {
             .subscribe(subscriber)
     }
     
-    public func get<T: Entity>(with subscriber: Subscribers.Sink<T, Error>) {
+    public func get<T: Entity>(with subscriber: AnySubscriber<T, Error>) {
         let url = apiPathV2.appendingPathComponent(T._entityName)
         let decoder = JSONDecoder()
         if #available(OSX 10.12, *) {
@@ -124,7 +141,20 @@ public class MolgenisClient {
             .replaceError(with: false)
             .eraseToAnyPublisher()
     }
-    
+
+    private func makeAggregateQueryItem(x: String, y: String?, distinct: String?) -> URLQueryItem {
+        switch (x, y, distinct) {
+        case (let x, .none, .none):
+            return URLQueryItem(name: "aggs", value: "x==\(x)")
+        case (let x, .some(let y), .none):
+            return URLQueryItem(name: "aggs", value: "x==\(x);y==\(y)")
+        case (let x, .some(let y), .some(let distinct)):
+            return URLQueryItem(name: "aggs", value: "x==\(x);y==\(y);distinct==\(distinct)")
+        case (let x, .none, .some(let distinct)):
+            return URLQueryItem(name: "aggs", value: "x==\(x);distinct==\(distinct)")
+        }
+    }
+
     private func makeGETRequest(url: URL) -> AnyPublisher<URLRequest, Error> {
         return Publishers.Sequence<[URL], Never>(sequence: [url])
             .receive(on: barrierQueue.ocombine)  // Use barrier queue to avoid reading concurrent access to self.login
@@ -160,7 +190,10 @@ public class MolgenisClient {
             .receive(on: processQueue.ocombine) // Switch back to a concurrent queue
             .eraseToAnyPublisher()
     }
-    
+
+    public enum MolgenisError: Error {
+        case invalidURL
+    }
     private enum Header: String {
         case contentType = "Content-Type"
         case token = "x-molgenis-token"

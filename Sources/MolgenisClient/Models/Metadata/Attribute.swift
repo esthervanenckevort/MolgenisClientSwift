@@ -9,9 +9,9 @@ import Foundation
 
 public final class Attribute: Entity {
     public static var _entityName = "sys_md_Attribute"
-    public var _id: String { id }
+    public var _id: String { String(describing: id) }
     public var _label: String { name }
-    public let id: String
+    public let id: String?
     public let name: String
     public let entity: EntityType?
     public let sequenceNr: Int?
