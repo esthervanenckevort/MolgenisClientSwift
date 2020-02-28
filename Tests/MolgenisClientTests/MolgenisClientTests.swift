@@ -47,7 +47,7 @@ final class MolgenisClientTests: XCTestCase {
         wait(for: [expectation], timeout: 2)
     }
 
-    func testAggregateXAndY() {
+    func testAggregateXAndY() throws {
         let expectation = XCTestExpectation()
         guard let molgenis = MolgenisClient(baseURL: URL(string: "https://samples.rd-connect.eu/")!) else {
             XCTFail()
@@ -63,11 +63,11 @@ final class MolgenisClientTests: XCTestCase {
         }) { response in
             
         })
-        molgenis.aggregates(entity: Sample.self, x: "AgeAtSampling", y: "AgeAtDiagnosis", with: subscriber)
+        try molgenis.aggregates(entity: Sample.self, x: "AgeAtSampling", y: "AgeAtDiagnosis").subscribe(subscriber)
         wait(for: [expectation], timeout: 2)
     }
 
-    func testAggregateXOnly() {
+    func testAggregateXOnly() throws {
         let expectation = XCTestExpectation()
         guard let molgenis = MolgenisClient(baseURL: URL(string: "https://samples.rd-connect.eu/")!) else {
             XCTFail()
@@ -83,11 +83,11 @@ final class MolgenisClientTests: XCTestCase {
         }) { response in
 
         })
-        molgenis.aggregates(entity: Sample.self, x: "AgeAtSampling", with: subscriber)
+        try molgenis.aggregates(entity: Sample.self, x: "AgeAtSampling").subscribe(subscriber)
         wait(for: [expectation], timeout: 2)
     }
 
-    func testAggregateXOnlyWithDistinct() {
+    func testAggregateXOnlyWithDistinct() throws {
         let expectation = XCTestExpectation()
         guard let molgenis = MolgenisClient(baseURL: URL(string: "https://samples.rd-connect.eu/")!) else {
             XCTFail()
@@ -103,11 +103,11 @@ final class MolgenisClientTests: XCTestCase {
         }) { response in
 
         })
-        molgenis.aggregates(entity: Sample.self, x: "AgeAtSampling", distinct: "ParticipantID", with: subscriber)
+        try molgenis.aggregates(entity: Sample.self, x: "AgeAtSampling", distinct: "ParticipantID").subscribe(subscriber)
         wait(for: [expectation], timeout: 2)
     }
 
-    func testAggregateXYWithDistinct() {
+    func testAggregateXYWithDistinct() throws {
         let expectation = XCTestExpectation()
         guard let molgenis = MolgenisClient(baseURL: URL(string: "https://samples.rd-connect.eu/")!) else {
             XCTFail()
@@ -123,11 +123,11 @@ final class MolgenisClientTests: XCTestCase {
         }) { response in
 
         })
-        molgenis.aggregates(entity: Sample.self, x: "AgeAtSampling", y: "AgeAtDiagnosis", distinct: "ParticipantID", with: subscriber)
+        try molgenis.aggregates(entity: Sample.self, x: "AgeAtSampling", y: "AgeAtDiagnosis", distinct: "ParticipantID").subscribe(subscriber)
         wait(for: [expectation], timeout: 2)
     }
 
-    struct Sample: Entity {
+    struct Sample: EntityResponse {
         static var _entityName = "rd_connect_Sample"
         var _id: String { ID }
         var _label: String { ID }

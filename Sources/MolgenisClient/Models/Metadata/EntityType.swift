@@ -7,7 +7,7 @@
 
 import Foundation
 
-public final class EntityType: Entity {
+public final class EntityType: EntityResponse {
     public static var _entityName = "sys_md_EntityType"
     public var _id: String { id }
     public var _label: String { label }

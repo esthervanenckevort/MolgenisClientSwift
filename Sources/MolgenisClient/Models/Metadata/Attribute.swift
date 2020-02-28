@@ -7,7 +7,7 @@
 
 import Foundation
 
-public final class Attribute: Entity {
+public final class Attribute: EntityResponse {
     public static var _entityName = "sys_md_Attribute"
     public var _id: String { String(describing: id) }
     public var _label: String { name }

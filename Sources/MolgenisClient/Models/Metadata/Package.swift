@@ -7,7 +7,7 @@
 
 import Foundation
 
-public final class Package: Entity {
+public final class Package: EntityResponse {
     public static var _entityName = "sys_md_Package"
     public var _id: String { id }
     public var _label: String { label }

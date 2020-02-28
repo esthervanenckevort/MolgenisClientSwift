@@ -7,7 +7,7 @@
 
 import Foundation
 
-public struct Collection<T: Decodable>: Decodable {
+public struct CollectionResponse<T: Decodable>: Decodable {
     let href: URL
     let nextHref: URL?
     let prefHref: URL?

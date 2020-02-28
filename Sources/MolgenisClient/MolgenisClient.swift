@@ -36,24 +36,23 @@ public class MolgenisClient {
         self.session = session
     }
 
-    public func aggregates<E: Entity, X: Decodable, Y: Decodable>(entity: E.Type, x: String, y: String? = nil, distinct: String? = nil, with subscriber: AnySubscriber<AggregateResponse<X, Y>, Error>) {
+    public func aggregates<E: EntityResponse, X: Decodable, Y: Decodable>(entity: E.Type, x: String, y: String? = nil, distinct: String? = nil) throws -> AnyPublisher<AggregateResponse<X,Y>, Error> {
         let decoder = JSONDecoder()
         var components = URLComponents(url: apiPathV2.appendingPathComponent(E._entityName), resolvingAgainstBaseURL: true)
         var queryItems = [URLQueryItem]()
         queryItems.append(makeAggregateQueryItem(x: x, y: y, distinct: distinct))
         components?.queryItems = queryItems
         guard let url = components?.url else {
-            subscriber.receive(completion: .failure(MolgenisError.invalidURL))
-            return
+            throw MolgenisError.invalidURL
         }
         return makeGETRequest(url: url)
             .flatMap { self.session.ocombine.dataTaskPublisher(for: $0).mapError { $0 as Error } }
             .map { $0.data }
             .decode(type: AggregateResponse<X, Y>.self, decoder: decoder)
-            .subscribe(subscriber)
+            .eraseToAnyPublisher()
     }
     
-    public func get<T: Entity>(id: String, with subscriber: AnySubscriber<T, Error>) {
+    public func get<T: EntityResponse>(id: String, with subscriber: AnySubscriber<T, Error>) {
         let url = apiPathV2.appendingPathComponent(T._entityName).appendingPathComponent(id)
         let decoder = JSONDecoder()
         if #available(OSX 10.12, *) {
@@ -70,7 +69,7 @@ public class MolgenisClient {
             .subscribe(subscriber)
     }
     
-    public func get<T: Entity>(with subscriber: AnySubscriber<T, Error>) {
+    public func get<T: EntityResponse>(with subscriber: AnySubscriber<T, Error>) {
         let url = apiPathV2.appendingPathComponent(T._entityName)
         let decoder = JSONDecoder()
         if #available(OSX 10.12, *) {
@@ -95,7 +94,7 @@ public class MolgenisClient {
             .receive(on: processQueue.ocombine) // Switch back to a concurrent queue
             .flatMap { self.session.ocombine.dataTaskPublisher(for: $0).mapError { $0 as Error } }
             .map { $0.data }
-            .decode(type: Collection<T>.self, decoder: decoder)
+            .decode(type: CollectionResponse<T>.self, decoder: decoder)
             .flatMap { (collection) -> Publishers.Sequence<Array<T>, Error> in
                 defer {
                     if let url = collection.nextHref {
@@ -119,7 +118,7 @@ public class MolgenisClient {
             df.dateFormat = "yyyy-MM-ddTHH\\:mm\\:ss.fffffffzzz"
             decoder.dateDecodingStrategy = .formatted(df)
         }
-        return makePOSTRequest(url: apiEndPointLogin, body: Login(username: user, password: password))
+        return makePOSTRequest(url: apiEndPointLogin, body: LoginRequest(username: user, password: password))
             .flatMap { self.session.ocombine.dataTaskPublisher(for: $0).mapError { $0 as Error } }
             .map { $0.data }
             .decode(type: LoginResponse.self, decoder: decoder)
@@ -134,7 +133,7 @@ public class MolgenisClient {
     }
     
     public func logout() -> AnyPublisher<Bool, Never> {
-        let login: Login? = nil
+        let login: LoginRequest? = nil
         return makePOSTRequest(url: apiEndPointLogout, body: login)
             .flatMap { self.session.ocombine.dataTaskPublisher(for: $0).mapError { $0 as Error } }
             .map { ($0.response as? HTTPURLResponse)?.statusCode  == 200 }

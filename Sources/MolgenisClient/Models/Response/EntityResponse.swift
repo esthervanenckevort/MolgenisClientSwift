@@ -7,7 +7,7 @@
 
 import Foundation
 
-public protocol Entity: Decodable {
+public protocol EntityResponse: Decodable {
     static var _entityName: String { get }
     var _id: String { get }
     var _label: String { get }
