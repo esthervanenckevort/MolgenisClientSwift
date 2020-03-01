@@ -14,12 +14,12 @@ public class MolgenisClient {
     private var apiEndPointLogin: URL { baseURL.appendingPathComponent("api/v1/login") }
     private var apiEndPointLogout: URL { baseURL.appendingPathComponent("api/v1/logout") }
     private var apiPathV2: URL { baseURL.appendingPathComponent("api/v2/") }
-    private let session: URLSession
-    private var login: LoginResponse?
+    private var session: URLSession
     private var barrierQueue = DispatchQueue(label: "barrier")
     private var processQueue = DispatchQueue.global()
+    private var configuration: URLSessionConfiguration
     
-    public init?(baseURL url: URL, using session: URLSession = .shared) {
+    public init?(baseURL url: URL, using configuration: URLSessionConfiguration = URLSessionConfiguration.default) {
         guard url.path == "/" || url.path == "" else {
             #if os(Linux)
             print("URL \(url) must not contain the API path.")
@@ -33,7 +33,9 @@ public class MolgenisClient {
             return nil
         }
         self.baseURL = url
-        self.session = session
+        self.configuration = configuration
+        self.configuration.httpAdditionalHeaders = MolgenisClient.makeHeaders(with: configuration.httpAdditionalHeaders, token: nil)
+        self.session = URLSession(configuration: configuration)
     }
 
     public func aggregates<E: EntityResponse, X: Decodable, Y: Decodable>(entity: E.Type, x: String, y: String? = nil, distinct: String? = nil) throws -> AnyPublisher<AggregateResponse<X,Y>, Error> {
@@ -45,7 +47,12 @@ public class MolgenisClient {
         guard let url = components?.url else {
             throw MolgenisError.invalidURL
         }
-        return makeGETRequest(url: url)
+        return Publishers.Sequence<[URL], Never>(sequence: [url])
+            .tryMap { (url) -> URLRequest in
+                var request = URLRequest(url: url)
+                request.httpMethod = Method.get.rawValue
+                return request
+            }
             .flatMap { self.session.ocombine.dataTaskPublisher(for: $0).mapError { $0 as Error } }
             .map { $0.data }
             .decode(type: AggregateResponse<X, Y>.self, decoder: decoder)
@@ -62,7 +69,12 @@ public class MolgenisClient {
             df.dateFormat = "yyyy-MM-ddTHH\\:mm\\:ss.fffffffzzz"
             decoder.dateDecodingStrategy = .formatted(df)
         }
-        return makeGETRequest(url: url)
+        return Publishers.Sequence<[URL], Never>(sequence: [url])
+            .tryMap { (url) -> URLRequest in
+                var request = URLRequest(url: url)
+                request.httpMethod = Method.get.rawValue
+                return request
+            }
             .flatMap { self.session.ocombine.dataTaskPublisher(for: $0).mapError { $0 as Error } }
             .map { $0.data }
             .decode(type: T.self, decoder: decoder)
@@ -81,17 +93,11 @@ public class MolgenisClient {
         }
         let subject = PassthroughSubject<URL, Never>()
         subject
-            .receive(on: barrierQueue.ocombine)  // Use barrier queue to avoid reading concurrent access to self.login
             .tryMap { (url) -> URLRequest in
                 var request = URLRequest(url: url)
                 request.httpMethod = Method.get.rawValue
-                request.addValue(ContentType.json.rawValue, forHTTPHeaderField: Header.contentType.rawValue)
-                if let token = self.login?.token {
-                    request.addValue(token, forHTTPHeaderField: Header.token.rawValue)
-                }
                 return request
             }
-            .receive(on: processQueue.ocombine) // Switch back to a concurrent queue
             .flatMap { self.session.ocombine.dataTaskPublisher(for: $0).mapError { $0 as Error } }
             .map { $0.data }
             .decode(type: CollectionResponse<T>.self, decoder: decoder)
@@ -111,32 +117,53 @@ public class MolgenisClient {
     
     public func login(user: String, password: String) -> AnyPublisher<Bool, Never> {
         let decoder = JSONDecoder()
+        let encoder = JSONEncoder()
         if #available(OSX 10.12, *) {
             decoder.dateDecodingStrategy = .iso8601
+            encoder.dateEncodingStrategy = .iso8601
         } else {
             let df = DateFormatter()
             df.dateFormat = "yyyy-MM-ddTHH\\:mm\\:ss.fffffffzzz"
             decoder.dateDecodingStrategy = .formatted(df)
+            encoder.dateEncodingStrategy = .formatted(df)
         }
-        return makePOSTRequest(url: apiEndPointLogin, body: LoginRequest(username: user, password: password))
+        let body = LoginRequest(username: user, password: password)
+        return Publishers.Sequence<[URL], Never>(sequence: [apiEndPointLogin])
+            .tryMap { (url) -> URLRequest in
+                var request = URLRequest(url: url)
+                request.httpMethod = Method.post.rawValue
+                request.httpBody = try encoder.encode(body)
+                request.addValue(ContentType.json.rawValue, forHTTPHeaderField: Header.contentType.rawValue)
+                return request
+            }
             .flatMap { self.session.ocombine.dataTaskPublisher(for: $0).mapError { $0 as Error } }
             .map { $0.data }
             .decode(type: LoginResponse.self, decoder: decoder)
-            .receive(on: barrierQueue.ocombine) // Use barrier queue to avoid reading concurrent access to self.login
-            .map {
-                self.login = $0
+            .map { (login) in
+                self.barrierQueue.sync {
+                    self.configuration.httpAdditionalHeaders = MolgenisClient.makeHeaders(with: self.configuration.httpAdditionalHeaders, token: login.token)
+                    self.session = URLSession(configuration: self.configuration)                }
                 return true
             }
-            .receive(on: processQueue.ocombine) // Switch back to a concurrent queue
             .replaceError(with: false)
             .eraseToAnyPublisher()
     }
     
     public func logout() -> AnyPublisher<Bool, Never> {
-        let login: LoginRequest? = nil
-        return makePOSTRequest(url: apiEndPointLogout, body: login)
+        return Publishers.Sequence<[URL], Never>(sequence: [apiEndPointLogout])
+            .tryMap { (url) -> URLRequest in
+                var request = URLRequest(url: url)
+                request.httpMethod = Method.post.rawValue
+                return request
+            }
             .flatMap { self.session.ocombine.dataTaskPublisher(for: $0).mapError { $0 as Error } }
-            .map { ($0.response as? HTTPURLResponse)?.statusCode  == 200 }
+            .map {
+                self.barrierQueue.sync {
+                    self.configuration.httpAdditionalHeaders = MolgenisClient.makeHeaders(with: self.configuration.httpAdditionalHeaders, token: nil)
+                    self.session = URLSession(configuration: self.configuration)
+                }
+                return ($0.response as? HTTPURLResponse)?.statusCode  == 200
+            }
             .replaceError(with: false)
             .eraseToAnyPublisher()
     }
@@ -154,40 +181,16 @@ public class MolgenisClient {
         }
     }
 
-    private func makeGETRequest(url: URL) -> AnyPublisher<URLRequest, Error> {
-        return Publishers.Sequence<[URL], Never>(sequence: [url])
-            .receive(on: barrierQueue.ocombine)  // Use barrier queue to avoid reading concurrent access to self.login
-            .tryMap { (url) -> URLRequest in
-                var request = URLRequest(url: url)
-                request.httpMethod = Method.get.rawValue
-                request.addValue(ContentType.json.rawValue, forHTTPHeaderField: Header.contentType.rawValue)
-                if let token = self.login?.token {
-                    request.addValue(token, forHTTPHeaderField: Header.token.rawValue)
-                }
-                return request
-            }
-            .receive(on: processQueue.ocombine) // Switch back to a concurrent queue
-            .eraseToAnyPublisher()
-    }
-    
-    private func makePOSTRequest<T: Encodable>(url: URL, body: T?) -> AnyPublisher<URLRequest, Error> {
-        let encoder = JSONEncoder()
-        return Publishers.Sequence<[URL], Never>(sequence: [url])
-            .receive(on: barrierQueue.ocombine)  // Use barrier queue to avoid reading concurrent access to self.login
-            .tryMap { (url) -> URLRequest in
-                var request = URLRequest(url: url)
-                request.httpMethod = Method.post.rawValue
-                request.addValue(ContentType.json.rawValue, forHTTPHeaderField: Header.contentType.rawValue)
-                if let token = self.login?.token {
-                    request.addValue(token, forHTTPHeaderField: Header.token.rawValue)
-                }
-                if let body = body {
-                    request.httpBody = try encoder.encode(body)
-                }
-                return request
-            }
-            .receive(on: processQueue.ocombine) // Switch back to a concurrent queue
-            .eraseToAnyPublisher()
+    private static func makeHeaders(with existing: [AnyHashable: Any]?, token: String?) -> [AnyHashable: Any] {
+        var headers = [AnyHashable : Any]()
+        if let existing = existing {
+            headers.merge(existing) { (left, right) in left }
+        }
+        headers[Header.contentType.rawValue] = ContentType.json.rawValue
+        if let token = token {
+            headers[Header.token.rawValue] = token
+        }
+        return headers
     }
 
     public enum MolgenisError: Error {
@@ -207,6 +210,6 @@ public class MolgenisClient {
     }
     
     private enum ContentType: String {
-        case json = "application/json"
+        case json = "application/json;charset=UTF-8"
     }
 }

@@ -159,7 +159,10 @@ final class MolgenisClientTests: XCTestCase {
             return
         }
         let cancelable = molgenis.login(user: User.admin.username, password: User.admin.password)
-            .sink(receiveCompletion: { (_) in }) { loggedIn in
+            .sink(receiveCompletion: {
+                (completion) in
+                self.evaluate(completion: completion)
+            }) { loggedIn in
             if loggedIn {
                 expectation.fulfill()
             }
@@ -183,5 +186,16 @@ final class MolgenisClientTests: XCTestCase {
         }
         wait(for: [expectation], timeout: 2)
         cancelable.cancel()
+    }
+
+    private func evaluate<T: Error>(completion: Subscribers.Completion<T>, with expectation: XCTestExpectation? = nil, function: String = #function) {
+        switch completion {
+        case .finished:
+            print("Finished in \(function)")
+            expectation?.fulfill()
+        case .failure(let error):
+            print("Failure in \(function): \(error)")
+            XCTFail(error.localizedDescription)
+        }
     }
 }
