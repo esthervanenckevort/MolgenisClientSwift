@@ -2,35 +2,22 @@ import Foundation
 #if canImport(FoundationNetworking)
 import FoundationNetworking
 #endif
-#if canImport(OSLog)
-import OSLog
-#endif
 import OpenCombine
 import OpenCombineFoundation
 import OpenCombineDispatch
 
 public class MolgenisClient {
     private let baseURL: URL
-    private var apiEndPointLogin: URL { baseURL.appendingPathComponent("api/v1/login") }
-    private var apiEndPointLogout: URL { baseURL.appendingPathComponent("api/v1/logout") }
-    private var apiPathV2: URL { baseURL.appendingPathComponent("api/v2/") }
+    private lazy var apiEndPointLogin: URL = baseURL.appendingPathComponent("api/v1/login")
+    private lazy var apiEndPointLogout: URL = baseURL.appendingPathComponent("api/v1/logout")
+    private lazy var apiPathV2: URL = baseURL.appendingPathComponent("api/v2/")
     private var session: URLSession
     private var barrierQueue = DispatchQueue(label: "barrier")
-    private var processQueue = DispatchQueue.global()
     private var configuration: URLSessionConfiguration
     
-    public init?(baseURL url: URL, using configuration: URLSessionConfiguration = URLSessionConfiguration.default) {
+    public init(baseURL url: URL, using configuration: URLSessionConfiguration = URLSessionConfiguration.default) throws {
         guard url.path == "/" || url.path == "" else {
-            #if os(Linux)
-            print("URL \(url) must not contain the API path.")
-            #else
-            if #available(OSX 10.12, *) {
-                os_log("URL [%@] must not contain the API path.", [url])
-            } else {
-                print("URL \(url) must not contain the API path.")
-            }
-            #endif
-            return nil
+            throw MolgenisError.invalidURL(message: "URL \(url) must not contain the API path.")
         }
         self.baseURL = url
         self.configuration = configuration
@@ -39,20 +26,15 @@ public class MolgenisClient {
     }
 
     public func aggregates<E: EntityResponse, X: Decodable, Y: Decodable>(entity: E.Type, x: String, y: String? = nil, distinct: String? = nil) throws -> AnyPublisher<AggregateResponse<X,Y>, Error> {
-        let decoder = JSONDecoder()
+        let decoder = makeJSONDecoder()
         var components = URLComponents(url: apiPathV2.appendingPathComponent(E._entityName), resolvingAgainstBaseURL: true)
         var queryItems = [URLQueryItem]()
         queryItems.append(makeAggregateQueryItem(x: x, y: y, distinct: distinct))
         components?.queryItems = queryItems
         guard let url = components?.url else {
-            throw MolgenisError.invalidURL
+            throw MolgenisError.invalidURL(message: "Failed to build URL")
         }
-        return Publishers.Sequence<[URL], Never>(sequence: [url])
-            .tryMap { (url) -> URLRequest in
-                var request = URLRequest(url: url)
-                request.httpMethod = Method.get.rawValue
-                return request
-            }
+        return Publishers.Sequence<[URL], Error>(sequence: [url])
             .flatMap { self.session.ocombine.dataTaskPublisher(for: $0).mapError { $0 as Error } }
             .map { $0.data }
             .decode(type: AggregateResponse<X, Y>.self, decoder: decoder)
@@ -61,20 +43,8 @@ public class MolgenisClient {
     
     public func get<T: EntityResponse>(id: String, with subscriber: AnySubscriber<T, Error>) {
         let url = apiPathV2.appendingPathComponent(T._entityName).appendingPathComponent(id)
-        let decoder = JSONDecoder()
-        if #available(OSX 10.12, *) {
-            decoder.dateDecodingStrategy = .iso8601
-        } else {
-            let df = DateFormatter()
-            df.dateFormat = "yyyy-MM-ddTHH\\:mm\\:ss.fffffffzzz"
-            decoder.dateDecodingStrategy = .formatted(df)
-        }
-        return Publishers.Sequence<[URL], Never>(sequence: [url])
-            .tryMap { (url) -> URLRequest in
-                var request = URLRequest(url: url)
-                request.httpMethod = Method.get.rawValue
-                return request
-            }
+        let decoder = makeJSONDecoder()
+        return Publishers.Sequence<[URL], Error>(sequence: [url])
             .flatMap { self.session.ocombine.dataTaskPublisher(for: $0).mapError { $0 as Error } }
             .map { $0.data }
             .decode(type: T.self, decoder: decoder)
@@ -83,21 +53,9 @@ public class MolgenisClient {
     
     public func get<T: EntityResponse>(with subscriber: AnySubscriber<T, Error>) {
         let url = apiPathV2.appendingPathComponent(T._entityName)
-        let decoder = JSONDecoder()
-        if #available(OSX 10.12, *) {
-            decoder.dateDecodingStrategy = .iso8601
-        } else {
-            let df = DateFormatter()
-            df.dateFormat = "yyyy-MM-ddTHH\\:mm\\:ss.fffffffzzz"
-            decoder.dateDecodingStrategy = .formatted(df)
-        }
-        let subject = PassthroughSubject<URL, Never>()
+        let decoder = makeJSONDecoder()
+        let subject = PassthroughSubject<URL, Error>()
         subject
-            .tryMap { (url) -> URLRequest in
-                var request = URLRequest(url: url)
-                request.httpMethod = Method.get.rawValue
-                return request
-            }
             .flatMap { self.session.ocombine.dataTaskPublisher(for: $0).mapError { $0 as Error } }
             .map { $0.data }
             .decode(type: CollectionResponse<T>.self, decoder: decoder)
@@ -116,17 +74,8 @@ public class MolgenisClient {
     }
     
     public func login(user: String, password: String) -> AnyPublisher<Bool, Never> {
-        let decoder = JSONDecoder()
-        let encoder = JSONEncoder()
-        if #available(OSX 10.12, *) {
-            decoder.dateDecodingStrategy = .iso8601
-            encoder.dateEncodingStrategy = .iso8601
-        } else {
-            let df = DateFormatter()
-            df.dateFormat = "yyyy-MM-ddTHH\\:mm\\:ss.fffffffzzz"
-            decoder.dateDecodingStrategy = .formatted(df)
-            encoder.dateEncodingStrategy = .formatted(df)
-        }
+        let decoder = makeJSONDecoder()
+        let encoder = makeJSONEncoder()
         let body = LoginRequest(username: user, password: password)
         return Publishers.Sequence<[URL], Never>(sequence: [apiEndPointLogin])
             .tryMap { (url) -> URLRequest in
@@ -181,6 +130,30 @@ public class MolgenisClient {
         }
     }
 
+    private func makeJSONEncoder() -> JSONEncoder {
+        let encoder = JSONEncoder()
+        if #available(OSX 10.12, *) {
+            encoder.dateEncodingStrategy = .iso8601
+        } else {
+            let df = DateFormatter()
+            df.dateFormat = "yyyy-MM-ddTHH\\:mm\\:ss.fffffffzzz"
+            encoder.dateEncodingStrategy = .formatted(df)
+        }
+        return encoder
+    }
+
+    private func makeJSONDecoder() -> JSONDecoder {
+        let decoder = JSONDecoder()
+        if #available(OSX 10.12, *) {
+            decoder.dateDecodingStrategy = .iso8601
+        } else {
+            let df = DateFormatter()
+            df.dateFormat = "yyyy-MM-ddTHH\\:mm\\:ss.fffffffzzz"
+            decoder.dateDecodingStrategy = .formatted(df)
+        }
+        return decoder
+    }
+
     private static func makeHeaders(with existing: [AnyHashable: Any]?, token: String?) -> [AnyHashable: Any] {
         var headers = [AnyHashable : Any]()
         if let existing = existing {
@@ -194,7 +167,7 @@ public class MolgenisClient {
     }
 
     public enum MolgenisError: Error {
-        case invalidURL
+        case invalidURL(message: String)
     }
     private enum Header: String {
         case contentType = "Content-Type"

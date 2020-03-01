@@ -3,12 +3,9 @@ import MolgenisClient
 import OpenCombine
 
 final class MolgenisClientTests: XCTestCase {
-    func testDownloadOneEntity() {
+    func testDownloadOneEntity() throws {
         let expectation = XCTestExpectation()
-        guard let molgenis = MolgenisClient(baseURL: URL(string: "https://directory.bbmri-eric.eu/")!) else {
-            XCTFail()
-            return
-        }
+        let molgenis = try MolgenisClient(baseURL: URL(string: "https://directory.bbmri-eric.eu/")!)
         let subscriber = AnySubscriber<EntityType, Error>(Subscribers.Sink<EntityType, Error>(receiveCompletion: {
             (completion) in
             switch completion {
@@ -26,12 +23,9 @@ final class MolgenisClientTests: XCTestCase {
         wait(for: [expectation], timeout: 2)
     }
 
-    func testDownloadCollectionOfEntity() {
+    func testDownloadCollectionOfEntity() throws {
         let expectation = XCTestExpectation()
-        guard let molgenis = MolgenisClient(baseURL: URL(string: "https://directory.bbmri-eric.eu/")!) else {
-            XCTFail()
-            return
-        }
+        let molgenis = try MolgenisClient(baseURL: URL(string: "https://directory.bbmri-eric.eu/")!)
         let subscriber = AnySubscriber<EntityType, Error>(Subscribers.Sink<EntityType, Error>(receiveCompletion: {
             (completion) in
             switch completion {
@@ -49,10 +43,7 @@ final class MolgenisClientTests: XCTestCase {
 
     func testAggregateXAndY() throws {
         let expectation = XCTestExpectation()
-        guard let molgenis = MolgenisClient(baseURL: URL(string: "https://samples.rd-connect.eu/")!) else {
-            XCTFail()
-            return
-        }
+        let molgenis = try MolgenisClient(baseURL: URL(string: "https://samples.rd-connect.eu/")!)
         let subscriber = AnySubscriber<AggregateResponse<Int?, Int?>, Error>(Subscribers.Sink<AggregateResponse<Int?, Int?>, Error>(receiveCompletion: { completion in
             switch completion {
             case .finished:
@@ -69,10 +60,7 @@ final class MolgenisClientTests: XCTestCase {
 
     func testAggregateXOnly() throws {
         let expectation = XCTestExpectation()
-        guard let molgenis = MolgenisClient(baseURL: URL(string: "https://samples.rd-connect.eu/")!) else {
-            XCTFail()
-            return
-        }
+        let molgenis = try MolgenisClient(baseURL: URL(string: "https://samples.rd-connect.eu/")!)
         let subscriber = AnySubscriber<AggregateResponse<Int?, Int?>, Error>(Subscribers.Sink<AggregateResponse<Int?, Int?>, Error>(receiveCompletion: { completion in
             switch completion {
             case .finished:
@@ -89,10 +77,7 @@ final class MolgenisClientTests: XCTestCase {
 
     func testAggregateXOnlyWithDistinct() throws {
         let expectation = XCTestExpectation()
-        guard let molgenis = MolgenisClient(baseURL: URL(string: "https://samples.rd-connect.eu/")!) else {
-            XCTFail()
-            return
-        }
+        let molgenis = try MolgenisClient(baseURL: URL(string: "https://samples.rd-connect.eu/")!)
         let subscriber = AnySubscriber<AggregateResponse<Int?, Int?>, Error>(Subscribers.Sink<AggregateResponse<Int?, Int?>, Error>(receiveCompletion: { completion in
             switch completion {
             case .finished:
@@ -109,10 +94,7 @@ final class MolgenisClientTests: XCTestCase {
 
     func testAggregateXYWithDistinct() throws {
         let expectation = XCTestExpectation()
-        guard let molgenis = MolgenisClient(baseURL: URL(string: "https://samples.rd-connect.eu/")!) else {
-            XCTFail()
-            return
-        }
+        let molgenis = try MolgenisClient(baseURL: URL(string: "https://samples.rd-connect.eu/")!)
         let subscriber = AnySubscriber<AggregateResponse<Int?, Int?>, Error>(Subscribers.Sink<AggregateResponse<Int?, Int?>, Error>(receiveCompletion: { completion in
             switch completion {
             case .finished:
@@ -136,13 +118,10 @@ final class MolgenisClientTests: XCTestCase {
         let AgeAtDiagnosis: Int?
     }
 
-    func testInvalidLogin() {
+    func testInvalidLogin() throws {
         let expectation = XCTestExpectation()
         expectation.isInverted = true
-        guard let molgenis = MolgenisClient(baseURL: URL(string: "https://directory.bbmri-eric.eu/")!) else {
-            XCTFail()
-            return
-        }
+        let molgenis = try MolgenisClient(baseURL: URL(string: "https://directory.bbmri-eric.eu/")!)
         let cancelable = molgenis.login(user: User.invalid.username, password: User.invalid.password).sink(receiveCompletion: { (_) in }) { loggedIn in
             if loggedIn {
                 expectation.fulfill()
@@ -152,12 +131,9 @@ final class MolgenisClientTests: XCTestCase {
         cancelable.cancel()
     }
     
-    func testValidLogin() {
+    func testValidLogin() throws {
         let expectation = XCTestExpectation()
-        guard let molgenis = MolgenisClient(baseURL: URL(string: "https://directory.bbmri-eric.eu/")!) else {
-            XCTFail()
-            return
-        }
+        let molgenis = try MolgenisClient(baseURL: URL(string: "https://directory.bbmri-eric.eu/")!)
         let cancelable = molgenis.login(user: User.admin.username, password: User.admin.password)
             .sink(receiveCompletion: {
                 (completion) in
@@ -171,12 +147,9 @@ final class MolgenisClientTests: XCTestCase {
         cancelable.cancel()
     }
     
-    func testLogout() {
+    func testLogout() throws {
         let expectation = XCTestExpectation()
-        guard let molgenis = MolgenisClient(baseURL: URL(string: "https://directory.bbmri-eric.eu")!) else {
-            XCTFail()
-            return
-        }
+        let molgenis = try MolgenisClient(baseURL: URL(string: "https://directory.bbmri-eric.eu")!)
         let cancelable = molgenis.login(user: User.admin.username, password: User.admin.password)
             .flatMap { _ in molgenis.logout() }
             .sink(receiveCompletion: { (_) in }) { loggedOut in
