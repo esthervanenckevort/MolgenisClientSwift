@@ -21,8 +21,7 @@ public class MolgenisClient {
         }
         self.baseURL = url
         self.configuration = configuration
-        self.configuration.httpAdditionalHeaders = MolgenisClient.makeHeaders(with: configuration.httpAdditionalHeaders, token: nil)
-        self.session = URLSession(configuration: configuration)
+        self.session = MolgenisClient.makeSession(with: self.configuration, token: nil)
     }
 
     public func aggregates<E: EntityResponse, X: Decodable, Y: Decodable>(entity: E.Type, x: String, y: String? = nil, distinct: String? = nil) throws -> AnyPublisher<AggregateResponse<X,Y>, Error> {
@@ -77,21 +76,20 @@ public class MolgenisClient {
         let decoder = makeJSONDecoder()
         let encoder = makeJSONEncoder()
         let body = LoginRequest(username: user, password: password)
-        return Publishers.Sequence<[URL], Never>(sequence: [apiEndPointLogin])
-            .tryMap { (url) -> URLRequest in
-                var request = URLRequest(url: url)
-                request.httpMethod = Method.post.rawValue
-                request.httpBody = try encoder.encode(body)
-                request.addValue(ContentType.json.rawValue, forHTTPHeaderField: Header.contentType.rawValue)
-                return request
-            }
-            .flatMap { self.session.ocombine.dataTaskPublisher(for: $0).mapError { $0 as Error } }
+        var request = URLRequest(url: apiEndPointLogin)
+        request.httpMethod = Method.post.rawValue
+        guard let httpBody = try? encoder.encode(body) else {
+            fatalError("Unexpected error: failed to encode login message as JSON.")
+        }
+        request.httpBody = httpBody
+        request.addValue(ContentType.json.rawValue, forHTTPHeaderField: Header.contentType.rawValue)
+        return session.ocombine.dataTaskPublisher(for: request)
             .map { $0.data }
             .decode(type: LoginResponse.self, decoder: decoder)
             .map { (login) in
                 self.barrierQueue.sync {
-                    self.configuration.httpAdditionalHeaders = MolgenisClient.makeHeaders(with: self.configuration.httpAdditionalHeaders, token: login.token)
-                    self.session = URLSession(configuration: self.configuration)                }
+                    self.session = MolgenisClient.makeSession(with: self.configuration, token: login.token)
+                }
                 return true
             }
             .replaceError(with: false)
@@ -99,17 +97,12 @@ public class MolgenisClient {
     }
     
     public func logout() -> AnyPublisher<Bool, Never> {
-        return Publishers.Sequence<[URL], Never>(sequence: [apiEndPointLogout])
-            .tryMap { (url) -> URLRequest in
-                var request = URLRequest(url: url)
-                request.httpMethod = Method.post.rawValue
-                return request
-            }
-            .flatMap { self.session.ocombine.dataTaskPublisher(for: $0).mapError { $0 as Error } }
+        var request = URLRequest(url: apiEndPointLogout)
+        request.httpMethod = Method.post.rawValue
+        return session.ocombine.dataTaskPublisher(for: request)
             .map {
                 self.barrierQueue.sync {
-                    self.configuration.httpAdditionalHeaders = MolgenisClient.makeHeaders(with: self.configuration.httpAdditionalHeaders, token: nil)
-                    self.session = URLSession(configuration: self.configuration)
+                    self.session = MolgenisClient.makeSession(with: self.configuration, token: nil)
                 }
                 return ($0.response as? HTTPURLResponse)?.statusCode  == 200
             }
@@ -154,16 +147,17 @@ public class MolgenisClient {
         return decoder
     }
 
-    private static func makeHeaders(with existing: [AnyHashable: Any]?, token: String?) -> [AnyHashable: Any] {
-        var headers = [AnyHashable : Any]()
-        if let existing = existing {
-            headers.merge(existing) { (left, right) in left }
-        }
+    private static func makeSession(with configuration: URLSessionConfiguration, token: String?) -> URLSession {
+        let configuration = configuration
+        var headers = configuration.httpAdditionalHeaders ?? [AnyHashable: Any]()
         headers[Header.contentType.rawValue] = ContentType.json.rawValue
         if let token = token {
             headers[Header.token.rawValue] = token
+        } else {
+            headers.removeValue(forKey: Header.token.rawValue)
         }
-        return headers
+        configuration.httpAdditionalHeaders = headers
+        return URLSession(configuration: configuration)
     }
 
     public enum MolgenisError: Error {
