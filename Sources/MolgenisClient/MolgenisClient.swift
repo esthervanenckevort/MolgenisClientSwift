@@ -32,8 +32,7 @@ public class MolgenisClient {
         guard let url = components?.url else {
             throw MolgenisError.invalidURL(message: "Failed to build URL")
         }
-        return Publishers.Sequence<[URL], Error>(sequence: [url])
-            .flatMap { self.session.ocombine.dataTaskPublisher(for: $0).mapError { $0 as Error } }
+        return session.ocombine.dataTaskPublisher(for: url)
             .map { $0.data }
             .decode(type: AggregateResponse<X, Y>.self, decoder: decoder)
             .eraseToAnyPublisher()
@@ -42,8 +41,7 @@ public class MolgenisClient {
     public func get<T: EntityResponse>(id: String, with subscriber: AnySubscriber<T, Error>) {
         let url = apiPathV2.appendingPathComponent(T._entityName).appendingPathComponent(id)
         let decoder = JSONDecoder.iso8601()
-        return Publishers.Sequence<[URL], Error>(sequence: [url])
-            .flatMap { self.session.ocombine.dataTaskPublisher(for: $0).mapError { $0 as Error } }
+        return session.ocombine.dataTaskPublisher(for: url)
             .map { $0.data }
             .decode(type: T.self, decoder: decoder)
             .subscribe(subscriber)
