@@ -11,7 +11,7 @@ public class MolgenisClient {
     private lazy var apiEndPointLogin: URL = baseURL.appendingPathComponent("api/v1/login")
     private lazy var apiEndPointLogout: URL = baseURL.appendingPathComponent("api/v1/logout")
     private lazy var apiPathV2: URL = baseURL.appendingPathComponent("api/v2/")
-    private var session: URLSession
+    private lazy var session: URLSession = URLSession(configuration: self.configuration, token: nil)
     private var barrierQueue = DispatchQueue(label: "barrier")
     private var configuration: URLSessionConfiguration
     
@@ -21,11 +21,10 @@ public class MolgenisClient {
         }
         self.baseURL = url
         self.configuration = configuration
-        self.session = MolgenisClient.makeSession(with: self.configuration, token: nil)
     }
 
     public func aggregates<E: EntityResponse, X: Decodable, Y: Decodable>(entity: E.Type, x: String, y: String? = nil, distinct: String? = nil) throws -> AnyPublisher<AggregateResponse<X,Y>, Error> {
-        let decoder = makeJSONDecoder()
+        let decoder = JSONDecoder.iso8601()
         var components = URLComponents(url: apiPathV2.appendingPathComponent(E._entityName), resolvingAgainstBaseURL: true)
         var queryItems = [URLQueryItem]()
         queryItems.append(makeAggregateQueryItem(x: x, y: y, distinct: distinct))
@@ -42,7 +41,7 @@ public class MolgenisClient {
     
     public func get<T: EntityResponse>(id: String, with subscriber: AnySubscriber<T, Error>) {
         let url = apiPathV2.appendingPathComponent(T._entityName).appendingPathComponent(id)
-        let decoder = makeJSONDecoder()
+        let decoder = JSONDecoder.iso8601()
         return Publishers.Sequence<[URL], Error>(sequence: [url])
             .flatMap { self.session.ocombine.dataTaskPublisher(for: $0).mapError { $0 as Error } }
             .map { $0.data }
@@ -52,7 +51,7 @@ public class MolgenisClient {
     
     public func get<T: EntityResponse>(with subscriber: AnySubscriber<T, Error>) {
         let url = apiPathV2.appendingPathComponent(T._entityName)
-        let decoder = makeJSONDecoder()
+        let decoder = JSONDecoder.iso8601()
         let subject = PassthroughSubject<URL, Error>()
         subject
             .flatMap { self.session.ocombine.dataTaskPublisher(for: $0).mapError { $0 as Error } }
@@ -73,22 +72,21 @@ public class MolgenisClient {
     }
     
     public func login(user: String, password: String) -> AnyPublisher<Bool, Never> {
-        let decoder = makeJSONDecoder()
-        let encoder = makeJSONEncoder()
+        let decoder = JSONDecoder.iso8601()
+        let encoder = JSONEncoder.iso8601()
         let body = LoginRequest(username: user, password: password)
         var request = URLRequest(url: apiEndPointLogin)
-        request.httpMethod = Method.post.rawValue
+        request.method = .post
         guard let httpBody = try? encoder.encode(body) else {
             fatalError("Unexpected error: failed to encode login message as JSON.")
         }
         request.httpBody = httpBody
-        request.addValue(ContentType.json.rawValue, forHTTPHeaderField: Header.contentType.rawValue)
         return session.ocombine.dataTaskPublisher(for: request)
             .map { $0.data }
             .decode(type: LoginResponse.self, decoder: decoder)
             .map { (login) in
                 self.barrierQueue.sync {
-                    self.session = MolgenisClient.makeSession(with: self.configuration, token: login.token)
+                    self.session = URLSession(configuration: self.configuration, token: login.token)
                 }
                 return true
             }
@@ -98,11 +96,11 @@ public class MolgenisClient {
     
     public func logout() -> AnyPublisher<Bool, Never> {
         var request = URLRequest(url: apiEndPointLogout)
-        request.httpMethod = Method.post.rawValue
+        request.method = .post
         return session.ocombine.dataTaskPublisher(for: request)
             .map {
                 self.barrierQueue.sync {
-                    self.session = MolgenisClient.makeSession(with: self.configuration, token: nil)
+                    self.session = URLSession(configuration: self.configuration, token: nil)
                 }
                 return ($0.response as? HTTPURLResponse)?.statusCode  == 200
             }
@@ -123,60 +121,7 @@ public class MolgenisClient {
         }
     }
 
-    private func makeJSONEncoder() -> JSONEncoder {
-        let encoder = JSONEncoder()
-        if #available(OSX 10.12, *) {
-            encoder.dateEncodingStrategy = .iso8601
-        } else {
-            let df = DateFormatter()
-            df.dateFormat = "yyyy-MM-ddTHH\\:mm\\:ss.fffffffzzz"
-            encoder.dateEncodingStrategy = .formatted(df)
-        }
-        return encoder
-    }
-
-    private func makeJSONDecoder() -> JSONDecoder {
-        let decoder = JSONDecoder()
-        if #available(OSX 10.12, *) {
-            decoder.dateDecodingStrategy = .iso8601
-        } else {
-            let df = DateFormatter()
-            df.dateFormat = "yyyy-MM-ddTHH\\:mm\\:ss.fffffffzzz"
-            decoder.dateDecodingStrategy = .formatted(df)
-        }
-        return decoder
-    }
-
-    private static func makeSession(with configuration: URLSessionConfiguration, token: String?) -> URLSession {
-        let configuration = configuration
-        var headers = configuration.httpAdditionalHeaders ?? [AnyHashable: Any]()
-        headers[Header.contentType.rawValue] = ContentType.json.rawValue
-        if let token = token {
-            headers[Header.token.rawValue] = token
-        } else {
-            headers.removeValue(forKey: Header.token.rawValue)
-        }
-        configuration.httpAdditionalHeaders = headers
-        return URLSession(configuration: configuration)
-    }
-
     public enum MolgenisError: Error {
         case invalidURL(message: String)
-    }
-    private enum Header: String {
-        case contentType = "Content-Type"
-        case token = "x-molgenis-token"
-    }
-    
-    private enum Method: String {
-        case get = "GET"
-        case post = "POST"
-        case delete = "DELETE"
-        case patch = "PATCH"
-        case put = "PUT"
-    }
-    
-    private enum ContentType: String {
-        case json = "application/json;charset=UTF-8"
     }
 }
