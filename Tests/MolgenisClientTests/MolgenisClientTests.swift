@@ -37,7 +37,7 @@ final class MolgenisClientTests: XCTestCase {
         }) { (_) in
             
         })
-        molgenis.get(with: subscriber)
+        try molgenis.get(with: subscriber, filter: nil)
         wait(for: [expectation], timeout: 2)
     }
 

@@ -9,6 +9,15 @@
           "revision": "1496bab2724bf6f794cba8ac4d97d2a5013eeba7",
           "version": "0.8.0"
         }
+      },
+      {
+        "package": "RSQL",
+        "repositoryURL": "https://github.com/esthervanenckevort/swiftrsql.git",
+        "state": {
+          "branch": null,
+          "revision": "9489659552485b54127c9aa9281744712e808618",
+          "version": "1.0.0"
+        }
       }
     ]
   },

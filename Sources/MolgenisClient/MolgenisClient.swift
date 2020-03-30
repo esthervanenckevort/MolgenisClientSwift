@@ -5,6 +5,7 @@ import FoundationNetworking
 import OpenCombine
 import OpenCombineFoundation
 import OpenCombineDispatch
+import RSQL
 
 public class MolgenisClient {
     private let baseURL: URL
@@ -23,10 +24,13 @@ public class MolgenisClient {
         self.configuration = configuration
     }
 
-    public func aggregates<E: EntityResponse, X: Decodable, Y: Decodable>(entity: E.Type, x: String, y: String? = nil, distinct: String? = nil) throws -> AnyPublisher<AggregateResponse<X,Y>, Error> {
+    public func aggregates<E: EntityResponse, X: Decodable, Y: Decodable>(entity: E.Type, x: String, y: String? = nil, distinct: String? = nil, filter: Predicate? = nil) throws -> AnyPublisher<AggregateResponse<X,Y>, Error> {
         let decoder = JSONDecoder.iso8601()
         var components = URLComponents(url: apiPathV2.appendingPathComponent(E._entityName), resolvingAgainstBaseURL: true)
         var queryItems = [URLQueryItem]()
+        if let filter = filter {
+            queryItems.append(URLQueryItem(name: "q", value: filter.rsql))
+        }
         queryItems.append(makeAggregateQueryItem(x: x, y: y, distinct: distinct))
         components?.queryItems = queryItems
         guard let url = components?.url else {
@@ -47,8 +51,17 @@ public class MolgenisClient {
             .subscribe(subscriber)
     }
     
-    public func get<T: EntityResponse>(with subscriber: AnySubscriber<T, Error>) {
-        let url = apiPathV2.appendingPathComponent(T._entityName)
+    public func get<T: EntityResponse>(with subscriber: AnySubscriber<T, Error>, filter: Predicate? = nil) throws {
+        var url: URL
+        if let filter = filter {
+            url = apiPathV2.appendingPathComponent(T._entityName)
+            guard var components = URLComponents(url: url, resolvingAgainstBaseURL: true) else { throw MolgenisError.invalidURL(message: "Failed to construct query URL")}
+            components.queryItems = [URLQueryItem(name: "q", value: filter.rsql)]
+            guard let finalURL = components.url else { throw MolgenisError.invalidURL(message: "Failed to construct query URL")}
+            url = finalURL
+        } else {
+            url = apiPathV2.appendingPathComponent(T._entityName)
+        }
         let decoder = JSONDecoder.iso8601()
         let subject = PassthroughSubject<URL, Error>()
         subject
